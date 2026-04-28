@@ -58,6 +58,12 @@ phone-transfer-backups/
 
 By default, `files/` is ignored by Git. The repo captures migration evidence without forcing large binary media into Git history.
 
+### Browser Sender
+
+The receiver serves `/send`, a phone-friendly browser sender. It lets the user open the laptop's Wi-Fi URL on Android, pair with the receiver, select files or a folder, upload them, and complete the same manifest/report flow.
+
+Browser mode cannot read the entire phone automatically. It is useful now because it gives the project a working migration path while the native Android scanner is built.
+
 ## Pairing
 
 The laptop prints a one-time numeric pairing code and shows it in the local UI. The Android app sends the code to `/api/pair`, receives a bearer token, and uses that token for manifest and file upload calls.
@@ -78,10 +84,10 @@ That gives the user a complete migration story instead of a vague "done".
 ## Transfer Flow
 
 1. Laptop receiver starts and creates a migration folder.
-2. User opens Android app and pairs with laptop.
-3. Android app runs permission preflight.
-4. Android app scans storage and creates manifest.
-5. Android app sends manifest to receiver.
+2. User opens the browser sender or Android app and pairs with laptop.
+3. Client runs permission or selection preflight.
+4. Client scans or lists selected files and creates manifest.
+5. Client sends manifest to receiver.
 6. Receiver maps Android paths to safe host paths.
 7. Android app uploads files.
 8. Receiver verifies each upload.
@@ -97,4 +103,3 @@ Git is poor for giant binary sets such as photos and videos. A normal phone migr
 - The backup remains easy to browse and copy.
 
 For small migrations, the receiver supports `--track-files`.
-
