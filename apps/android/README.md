@@ -2,6 +2,8 @@
 
 The Android client will be a native Kotlin app. The receiver is being built first so the Android code has a stable target.
 
+The project also includes a browser sender at `/send` so a user can perform a practical Wi-Fi transfer before the native app is complete.
+
 ## Primary UX
 
 1. User starts the laptop receiver.
@@ -40,4 +42,3 @@ Planned modules:
 - Each discovered file ends as `verified`, `failed`, `skipped`, or `inaccessible`.
 - The phone sends skipped/inaccessible data to the receiver so the final report is honest.
 - The final success state comes from laptop verification, not from upload completion alone.
-
