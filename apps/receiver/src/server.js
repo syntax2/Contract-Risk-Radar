@@ -9,6 +9,7 @@ const { Transform } = require("node:stream");
 
 const { createMigrationRepository } = require("./gitRepo");
 const { resolveInside, toHostRelativePath } = require("./pathSafety");
+const { renderSenderHtml } = require("./senderUi");
 const { renderIndexHtml } = require("./webUi");
 
 const DEFAULT_PORT = 47888;
@@ -118,6 +119,7 @@ function getNetworkUrls(port) {
 }
 
 function publicStatus(state, port) {
+  const urls = getNetworkUrls(port);
   let expectedFiles = 0;
   let expectedBytes = 0;
   let verifiedFiles = 0;
@@ -152,7 +154,8 @@ function publicStatus(state, port) {
     failedFiles,
     failedUploadAttempts: state.failures.length,
     missingFiles,
-    urls: getNetworkUrls(port),
+    urls,
+    senderUrls: urls.map((url) => `${url}/send`),
     git: state.gitResult
   };
 }
@@ -600,6 +603,11 @@ function createServer(state) {
     try {
       if (req.method === "GET" && requestUrl.pathname === "/") {
         sendText(res, 200, renderIndexHtml(publicStatus(state, state.options.port)), "text/html; charset=utf-8");
+        return;
+      }
+
+      if (req.method === "GET" && requestUrl.pathname === "/send") {
+        sendText(res, 200, renderSenderHtml(publicStatus(state, state.options.port)), "text/html; charset=utf-8");
         return;
       }
 
