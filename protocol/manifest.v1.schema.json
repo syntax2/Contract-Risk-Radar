@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oneshot-phone-transfer.local/protocol/manifest.v1.schema.json",
+  "title": "OneShot Phone Transfer Manifest v1",
+  "type": "object",
+  "required": ["version", "createdAt", "device", "files"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "device": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "androidVersion": { "type": "string" },
+        "model": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "path", "accessMode"],
+        "properties": {
+          "label": { "type": "string" },
+          "path": { "type": "string" },
+          "accessMode": {
+            "type": "string",
+            "enum": ["mediastore", "saf-tree", "all-files", "manual"]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "inaccessible": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "reason"],
+        "properties": {
+          "path": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relativePath", "size"],
+        "properties": {
+          "id": { "type": "string" },
+          "relativePath": { "type": "string" },
+          "displayPath": { "type": "string" },
+          "sourceUri": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "modifiedAt": { "type": "string", "format": "date-time" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "mimeType": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": ["photo", "video", "audio", "document", "download", "archive", "other"]
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
+
