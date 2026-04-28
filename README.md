@@ -31,6 +31,14 @@ Then open the laptop UI shown in the terminal, usually:
 http://localhost:47888
 ```
 
+Open the phone sender from the Android phone using the Wi-Fi URL shown by the receiver:
+
+```text
+http://<laptop-ip>:47888/send
+```
+
+The sender page lets you pair with the laptop code, choose files or a folder, upload them, and wait for the laptop verification report.
+
 To store backups somewhere specific:
 
 ```powershell
@@ -51,5 +59,4 @@ Use `--track-files` only for small migrations. Git is not a good storage engine 
 node apps\receiver\scripts\smoke-test.js
 ```
 
-The smoke test starts the receiver, pairs, uploads two files, completes the migration, and checks the transfer report.
-
+The smoke test starts the receiver, pairs, uploads hashed and browser-style files, completes the migration, and checks the transfer report.
