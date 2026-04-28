@@ -1,4 +1,33 @@
-# OneShot Phone Transfer
+# New Project Workspace
+
+This workspace currently contains two product prototypes:
+
+- `apps/receiver`: OneShot Phone Transfer, a local-first Android-to-laptop migration receiver.
+- `apps/contract-risk-radar`: Contract Risk Radar, a local-first contract analysis workspace with a v2 risk algorithm, animated 3D radar UI, clause review, negotiation asks, obligations, and date tracking.
+
+## Contract Risk Radar
+
+Run the contract analysis app:
+
+```powershell
+node apps\contract-risk-radar\src\server.js --port 48910
+```
+
+Then open:
+
+```text
+http://localhost:48910
+```
+
+Optional OpenAI analysis turns on when both `OPENAI_API_KEY` and `OPENAI_MODEL` are set before launch. Without those variables, the app uses its built-in local risk engine.
+
+Run its smoke test:
+
+```powershell
+node apps\contract-risk-radar\scripts\smoke-test.js
+```
+
+## OneShot Phone Transfer
 
 OneShot Phone Transfer is a local-first Android-to-laptop migration tool for a mostly one-time move of phone files onto a laptop.
 
