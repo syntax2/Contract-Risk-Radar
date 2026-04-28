@@ -42,24 +42,29 @@ function requestJson(port, method, pathname, body, token) {
   });
 }
 
-function uploadFile(port, token, relativePath, content, modifiedAt) {
+function uploadFile(port, token, relativePath, content, modifiedAt, sendSha = true) {
   const buffer = Buffer.from(content);
   const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
   return new Promise((resolve, reject) => {
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/octet-stream",
+      "content-length": buffer.length,
+      "x-file-size": buffer.length,
+      "x-modified-at": modifiedAt
+    };
+
+    if (sendSha) {
+      headers["x-file-sha256"] = sha256;
+    }
+
     const req = http.request({
       hostname: "127.0.0.1",
       port,
       method: "PUT",
       path: `/api/files?path=${encodeURIComponent(relativePath)}`,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/octet-stream",
-        "content-length": buffer.length,
-        "x-file-size": buffer.length,
-        "x-file-sha256": sha256,
-        "x-modified-at": modifiedAt
-      }
+      headers
     }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
@@ -103,11 +108,16 @@ async function main() {
       {
         relativePath: "Download/report:name.txt",
         content: "downloaded report\n"
+      },
+      {
+        relativePath: "Selected files/00003-browser-only.bin",
+        content: "browser mode without precomputed hash\n",
+        skipManifestSha: true
       }
     ].map((file) => ({
       ...file,
       size: Buffer.byteLength(file.content),
-      sha256: crypto.createHash("sha256").update(Buffer.from(file.content)).digest("hex"),
+      sha256: file.skipManifestSha ? null : crypto.createHash("sha256").update(Buffer.from(file.content)).digest("hex"),
       modifiedAt
     }));
 
@@ -142,7 +152,7 @@ async function main() {
     }, pair.token);
 
     for (const file of files) {
-      await uploadFile(port, pair.token, file.relativePath, file.content, file.modifiedAt);
+      await uploadFile(port, pair.token, file.relativePath, file.content, file.modifiedAt, !file.skipManifestSha);
     }
 
     const complete = await requestJson(port, "POST", "/api/complete", {
