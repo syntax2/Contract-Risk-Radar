@@ -218,6 +218,11 @@ function renderIndexHtml(initialStatus) {
     </section>
 
     <section class="section">
+      <strong>Phone Sender URLs</strong>
+      <ul id="sender-urls"></ul>
+    </section>
+
+    <section class="section">
       <strong>Final Verification</strong>
       <div id="verification">Waiting for phone manifest.</div>
     </section>
@@ -257,6 +262,14 @@ function renderIndexHtml(initialStatus) {
         const li = document.createElement("li");
         li.textContent = url;
         urls.appendChild(li);
+      }
+
+      const senderUrls = document.getElementById("sender-urls");
+      senderUrls.innerHTML = "";
+      for (const url of status.senderUrls || []) {
+        const li = document.createElement("li");
+        li.textContent = url;
+        senderUrls.appendChild(li);
       }
 
       const verification = document.getElementById("verification");
