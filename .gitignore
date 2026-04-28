@@ -1,0 +1,13 @@
+.run/
+phone-transfer-backups/
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+
+# Editor / OS
+.DS_Store
+Thumbs.db
