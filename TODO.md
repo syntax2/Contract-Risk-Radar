@@ -10,6 +10,8 @@
 - [x] Write final transfer report.
 - [x] Create Git repo for migration metadata.
 - [x] Add smoke test with simulated phone client.
+- [x] Add phone-friendly browser sender page.
+- [x] Support browser uploads without precomputed hashes.
 
 ## Phase 2: Android Client
 
@@ -30,4 +32,3 @@
 - [ ] Add USB fallback path.
 - [ ] Add encrypted-at-rest backup option.
 - [ ] Add restore/export viewer for completed backups.
-
