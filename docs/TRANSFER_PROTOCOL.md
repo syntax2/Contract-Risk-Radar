@@ -6,6 +6,14 @@ The first implementation uses simple local HTTP. All authenticated calls use:
 Authorization: Bearer <token>
 ```
 
+The receiver also serves a browser client at:
+
+```http
+GET /send
+```
+
+That page uses the same API below.
+
 ## Pair
 
 ```http
@@ -60,6 +68,8 @@ X-Modified-At: 2026-04-28T15:30:00.000Z
 Content-Type: application/octet-stream
 ```
 
+`X-File-Sha256` is optional for browser uploads where hashing a large file before sending would create poor memory pressure. The receiver still computes the received SHA-256 and verifies size.
+
 Response:
 
 ```json
@@ -95,4 +105,3 @@ The v1 receiver accepts whole-file uploads. The next protocol increment should a
 - `POST /api/files/finish`
 
 That will support resume for very large videos and flaky Wi-Fi.
-
