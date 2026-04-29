@@ -8,80 +8,46 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <div class="motion-field" aria-hidden="true">
-      <canvas id="riskCanvas"></canvas>
-      <div class="field-glow"></div>
-      <div class="field-grid"></div>
-    </div>
+    <canvas id="riskCanvas" aria-hidden="true"></canvas>
+    <div class="atmosphere" aria-hidden="true"></div>
 
-    <div class="app-shell">
+    <div class="workspace">
       <header class="topbar">
-        <div class="brand-lockup" aria-label="Contract Risk Radar">
-          <div class="brand-mark">CR</div>
-          <div>
-            <h1>Contract Risk Radar</h1>
-            <p id="engineLabel">Local risk engine</p>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <button class="ghost-button" id="sampleButton" type="button">Load sample</button>
-          <button class="ghost-button" id="exportButton" type="button" disabled>Export brief</button>
-        </div>
+        <a class="brand" href="/" aria-label="Contract Risk Radar">
+          <span class="brand-mark">RR</span>
+          <span>
+            <strong>Contract Risk Radar</strong>
+            <small id="engineLabel">Checking local AI</small>
+          </span>
+        </a>
+        <nav class="top-actions" aria-label="Document actions">
+          <button class="quiet-button" id="sampleButton" type="button">Sample</button>
+          <button class="quiet-button" id="exportButton" type="button" disabled>Export JSON</button>
+        </nav>
       </header>
 
-      <main class="product-shell">
-        <section class="hero-panel" aria-labelledby="analysisHeading">
-          <div class="hero-copy">
-            <p class="eyebrow">Contract intelligence</p>
-            <h2 id="analysisHeading">Evidence-first document risk analysis</h2>
-            <p id="summaryText">No document is under review yet.</p>
-            <div class="factor-ribbon" id="factorRibbon">
-              <span>Exposure --</span>
-              <span>Reliability --</span>
-              <span>Ambiguity --</span>
-            </div>
-          </div>
-          <div class="score-module">
-            <div class="score-dial" aria-label="Risk score">
-              <svg viewBox="0 0 120 120" role="img" aria-hidden="true">
-                <circle class="score-track" cx="60" cy="60" r="50"></circle>
-                <circle class="score-value" id="scoreValue" cx="60" cy="60" r="50"></circle>
-              </svg>
-              <div>
-                <strong id="scoreText">--</strong>
-                <span>risk</span>
-              </div>
-            </div>
-            <div>
-              <p class="score-label">Decision</p>
-              <h3 id="verdictText">Awaiting document</h3>
-            </div>
-          </div>
-        </section>
-
-        <section class="input-panel" aria-labelledby="documentHeading">
-          <div class="section-heading">
+      <main class="app-grid">
+        <section class="source-pane" aria-labelledby="sourceHeading">
+          <div class="pane-heading">
             <span>01</span>
-            <h2 id="documentHeading">Source Document</h2>
+            <h1 id="sourceHeading">Document intake</h1>
           </div>
 
-          <label class="field-label" for="documentTitle">Title</label>
+          <label class="field-label" for="documentTitle">Document</label>
           <input id="documentTitle" class="text-input" type="text" value="Master Services Agreement">
 
-          <div class="drop-zone" id="dropZone">
+          <label class="drop-zone" id="dropZone" for="fileInput">
             <input id="fileInput" type="file" accept=".txt,.md,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-            <div class="drop-zone-inner">
-              <strong id="fileName">Drop or choose a file</strong>
-              <span id="fileMeta">TXT, DOCX, or text-based PDF</span>
-            </div>
-          </div>
+            <span id="fileName">Upload PDF, DOCX, or text</span>
+            <small id="fileMeta">Text-based PDFs work best</small>
+          </label>
 
-          <label class="field-label" for="contractText">Agreement text</label>
+          <label class="field-label" for="contractText">Extracted document text</label>
           <textarea id="contractText" spellcheck="false"></textarea>
 
-          <div class="control-row">
+          <div class="control-cluster">
             <fieldset>
-              <legend>Your side</legend>
+              <legend>Perspective</legend>
               <div class="segmented-control" data-control="role">
                 <button type="button" data-value="provider" class="active">Provider</button>
                 <button type="button" data-value="client">Client</button>
@@ -89,7 +55,7 @@
               </div>
             </fieldset>
             <fieldset>
-              <legend>Posture</legend>
+              <legend>Review depth</legend>
               <div class="segmented-control" data-control="posture">
                 <button type="button" data-value="conservative">Careful</button>
                 <button type="button" data-value="balanced" class="active">Balanced</button>
@@ -98,40 +64,128 @@
             </fieldset>
           </div>
 
-          <button class="primary-button" id="analyzeButton" type="button">Analyze risk</button>
+          <button class="primary-button" id="analyzeButton" type="button">Run full analysis</button>
           <p class="status-line" id="statusLine">Ready</p>
+
+          <div class="analysis-progress" id="analysisProgress" aria-hidden="true">
+            <div class="progress-orbit" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="progress-header">
+              <div>
+                <span>Live analysis</span>
+                <strong id="progressStage">Preparing source</strong>
+              </div>
+              <b id="progressPercent">0%</b>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-steps">
+              <span data-progress-step="0">Extract</span>
+              <span data-progress-step="1">Shape</span>
+              <span data-progress-step="2">Reason</span>
+              <span data-progress-step="3">Render</span>
+            </div>
+            <p id="progressDetail">Waiting for the analysis engine.</p>
+          </div>
         </section>
 
-        <section class="analysis-panel" aria-labelledby="riskHeading">
-          <div class="section-heading">
-            <span>02</span>
-            <h2 id="riskHeading">Risk Pressure</h2>
+        <section class="brief-pane" aria-labelledby="briefHeading">
+          <div class="brief-header">
+            <div>
+              <p class="eyebrow">Decision brief</p>
+              <h2 id="briefHeading">No document analyzed yet</h2>
+              <p id="summaryText">Upload a document or load the sample to generate a source-grounded risk brief.</p>
+            </div>
+            <div class="risk-meter" aria-label="Risk score">
+              <svg viewBox="0 0 128 128" role="img" aria-hidden="true">
+                <circle class="meter-track" cx="64" cy="64" r="54"></circle>
+                <circle class="meter-value" id="scoreValue" cx="64" cy="64" r="54"></circle>
+              </svg>
+              <strong id="scoreText">--</strong>
+              <span>risk</span>
+            </div>
           </div>
 
-          <div class="category-grid" id="categoryGrid"></div>
+          <div class="signal-strip" id="signalStrip">
+            <span>Confidence --</span>
+            <span>Source --</span>
+            <span>Issues --</span>
+            <span>Model --</span>
+          </div>
 
-          <div class="section-heading clause-heading">
-            <span>03</span>
-            <h2>Clause Evidence</h2>
+          <div class="pipeline-rail" id="pipelineRail" aria-label="Analysis pipeline">
+            <article>
+              <span>01</span>
+              <strong>Extract</strong>
+              <p>Waiting for source text</p>
+            </article>
+            <article>
+              <span>02</span>
+              <strong>Shape</strong>
+              <p>LLM input packet not built</p>
+            </article>
+            <article>
+              <span>03</span>
+              <strong>Report</strong>
+              <p>No final report yet</p>
+            </article>
           </div>
-          <div class="clause-list" id="clauseList">
-            <div class="empty-state">Analysis results will populate the board.</div>
-          </div>
+
+          <section class="trust-section">
+            <div class="section-title">
+              <span>02</span>
+              <h3>Why this conclusion makes sense</h3>
+            </div>
+            <p class="trust-copy" id="confidenceReason">The report will show how the conclusion was reached, what evidence supports it, and where the uploaded text leaves uncertainty.</p>
+          </section>
+
+          <section class="trust-section">
+            <div class="section-title">
+              <span>03</span>
+              <h3>Final report narrative</h3>
+            </div>
+            <p class="trust-copy" id="reportNarrative">The final report will connect the strongest evidence into a readable decision story.</p>
+            <p class="action-copy" id="recommendedAction">Recommended action will appear here after analysis.</p>
+          </section>
+
+          <section class="trust-section">
+            <div class="section-title">
+              <span>04</span>
+              <h3>Evidence ledger</h3>
+            </div>
+            <div class="evidence-grid" id="evidenceGrid">
+              <article class="empty-state">Evidence will appear here after analysis.</article>
+            </div>
+          </section>
+
+          <section class="trust-section">
+            <div class="section-title">
+              <span>05</span>
+              <h3>Issue findings</h3>
+            </div>
+            <div class="issue-list" id="clauseList">
+              <article class="empty-state">Findings will appear here after analysis.</article>
+            </div>
+          </section>
         </section>
 
-        <aside class="brief-panel" aria-labelledby="briefHeading">
-          <div class="section-heading">
-            <span>04</span>
-            <h2 id="briefHeading">Decision Brief</h2>
+        <aside class="inspector-pane" aria-labelledby="inspectorHeading">
+          <div class="pane-heading">
+            <span>05</span>
+            <h2 id="inspectorHeading">Trust console</h2>
           </div>
 
-          <div class="metric-stack">
+          <div class="metric-board">
             <div>
               <span>Confidence</span>
               <strong id="confidenceMetric">--</strong>
             </div>
             <div>
-              <span>Reliability</span>
+              <span>Source quality</span>
               <strong id="reliabilityMetric">--</strong>
             </div>
             <div>
@@ -140,44 +194,34 @@
             </div>
           </div>
 
-          <section class="brief-section high-attention">
-            <h3>Review Triggers</h3>
+          <section class="inspector-section alert-section">
+            <h3>Review triggers</h3>
             <ul id="reviewTriggerList"></ul>
           </section>
 
-          <section class="brief-section">
-            <h3>Negotiation Asks</h3>
+          <section class="inspector-section">
+            <h3>Uncertainty</h3>
+            <ul id="uncertaintyList"></ul>
+          </section>
+
+          <section class="inspector-section">
+            <h3>Recommended checks</h3>
             <ul id="negotiationList"></ul>
           </section>
 
-          <section class="brief-section">
-            <h3>Risk Factors</h3>
-            <ul id="factorList"></ul>
+          <section class="inspector-section">
+            <h3>Category pressure</h3>
+            <div class="category-grid" id="categoryGrid"></div>
           </section>
 
-          <section class="brief-section">
-            <h3>Guardrails Found</h3>
-            <ul id="mitigatorList"></ul>
+          <section class="inspector-section">
+            <h3>Analysis method</h3>
+            <ul id="methodList"></ul>
           </section>
 
-          <section class="brief-section">
-            <h3>Text Reliability</h3>
-            <ul id="reliabilityList"></ul>
-          </section>
-
-          <section class="brief-section">
-            <h3>Obligations</h3>
-            <ul id="obligationList"></ul>
-          </section>
-
-          <section class="brief-section">
-            <h3>Date Watch</h3>
-            <ul id="dateList"></ul>
-          </section>
-
-          <section class="brief-section">
-            <h3>Missing Terms</h3>
-            <ul id="missingList"></ul>
+          <section class="inspector-section">
+            <h3>Source notes</h3>
+            <ul id="sourceQualityList"></ul>
           </section>
         </aside>
       </main>
