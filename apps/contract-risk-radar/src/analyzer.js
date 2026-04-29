@@ -84,6 +84,7 @@ const RISK_SIGNALS = [
     severity: 2.15,
     confidence: 0.76,
     regex: /\bconsequential\s+damages\b|\bindirect\s+damages\b|\blost\s+profits\b/i,
+    suppress: /\b(?:no|not|neither\s+party\s+may\s+recover|excludes?|waives?)\s+(?:any\s+)?(?:indirect|consequential|special|punitive|lost\s+profits)\b|\bconsequential\s+damages\s+(?:are|is)\s+excluded\b/i,
     ask: "Exclude indirect, consequential, special, punitive, and lost-profit damages.",
     impact: "Damages can expand beyond direct, predictable losses.",
     roles: { provider: 1.16, client: 0.9 }
@@ -178,7 +179,7 @@ const RISK_SIGNALS = [
     title: "Non-compete language is a major constraint",
     severity: 4.1,
     confidence: 0.9,
-    regex: /\bnon[-\s]?compete\b|\bshall\s+not\s+compete\b|\bnot\s+compete\s+with\b|\bcompetitor\b/i,
+    regex: /\bnon[-\s]?compete\b|\bshall\s+not\s+compete\b|\bnot\s+compete\s+with\b|\b(?:provide|perform|offer)\s+(?:similar\s+)?services\s+to\s+(?:any\s+)?(?:client\s+)?competitor\b/i,
     ask: "Remove non-compete language or narrow it to named conflicts.",
     impact: "Future business can be blocked beyond the scope of the deal.",
     roles: { provider: 1.22, client: 0.88 }
@@ -240,6 +241,7 @@ const RISK_SIGNALS = [
     severity: 1.7,
     confidence: 0.72,
     regex: /\binjunctive\s+relief\b|\btemporary\s+restraining\b/i,
+    suppress: /\binjunctive\s+relief\b.{0,90}\b(?:confidentiality|intellectual\s+property|security|non[-\s]?solicit)\b/i,
     ask: "Limit injunctive relief to confidentiality, IP, security, or non-solicit breaches.",
     impact: "A dispute can escalate into emergency court action."
   },
@@ -347,6 +349,7 @@ function analyzeContract(text, options = {}) {
   const ambiguity = scoreAmbiguity(cleanText);
   const obligations = extractObligations(units);
   const dates = extractDates(cleanText);
+  const reliability = assessReliability({ cleanText, sections, wordCount });
   const categoryResults = scoreCategories(signals, mitigators, completeness.missing);
   const clauses = buildClauseFindings(signals, categoryResults);
   const factors = scoreFactors({ categoryResults, completeness, ambiguity, obligations, dates, signals, wordCount });
@@ -377,7 +380,7 @@ function analyzeContract(text, options = {}) {
     summary,
     verdict,
     riskScore,
-    confidence: estimateConfidence({ wordCount, signalCount: signals.length, sectionCount: sections.length, completenessScore: completeness.score }),
+    confidence: estimateConfidence({ wordCount, signalCount: signals.length, sectionCount: sections.length, completenessScore: completeness.score, reliabilityScore: reliability.score }),
     riskPosture,
     categories: categoryResults.map((category) => ({
       id: category.id,
@@ -395,6 +398,8 @@ function analyzeContract(text, options = {}) {
     missing: completeness.missing.map((item) => item.label),
     questions: buildQuestions(completeness.missing, categoryResults, signals),
     mitigators: mitigators.map((item) => item.label),
+    reliability,
+    reviewTriggers: buildReviewTriggers({ riskScore, reliability, clauses, completeness, ambiguity }),
     factors,
     metrics: {
       wordCount,
@@ -415,6 +420,9 @@ function collectSignals(units, role, posture) {
   for (const unit of units) {
     for (const signal of RISK_SIGNALS) {
       if (!signal.regex.test(unit.text)) {
+        continue;
+      }
+      if (signal.suppress && signal.suppress.test(unit.text)) {
         continue;
       }
 
@@ -495,6 +503,42 @@ function scoreCompleteness(text, mitigators) {
   const score = clamp(Math.round((missingLoad / 29) * 100 - mitigatorCredit), 0, 100);
 
   return { score, missing };
+}
+
+function assessReliability({ cleanText, sections, wordCount }) {
+  const warnings = [];
+  let score = 100;
+
+  if (wordCount < 250) {
+    warnings.push("Document text is short, so missing sections may be outside the uploaded excerpt.");
+    score -= 24;
+  }
+
+  if (sections.length <= 1 && wordCount > 650) {
+    warnings.push("No clear section structure was detected, reducing clause-boundary confidence.");
+    score -= 14;
+  }
+
+  const symbolRatio = cleanText.length ? (cleanText.match(/[^\w\s.,;:()/'"-]/g) || []).length / cleanText.length : 0;
+  if (symbolRatio > 0.04) {
+    warnings.push("Extraction contains unusual characters, which may indicate OCR or PDF parsing noise.");
+    score -= 18;
+  }
+
+  if (!/\b(?:agreement|contract|terms|statement\s+of\s+work|services|party|parties)\b/i.test(cleanText)) {
+    warnings.push("Text does not strongly resemble a contract, so legal-clause classification is less certain.");
+    score -= 18;
+  }
+
+  if (warnings.length === 0) {
+    warnings.push("Text quality and structure look sufficient for automated triage.");
+  }
+
+  return {
+    score: clamp(score, 30, 96),
+    level: score >= 78 ? "strong" : score >= 58 ? "usable" : "limited",
+    warnings
+  };
 }
 
 function scoreAmbiguity(text) {
@@ -619,6 +663,33 @@ function buildQuestions(missingTerms, categoryResults, signals) {
   }
 
   return questions;
+}
+
+function buildReviewTriggers({ riskScore, reliability, clauses, completeness, ambiguity }) {
+  const triggers = [];
+  const highCount = clauses.filter((clause) => clause.severity === "high").length;
+
+  if (riskScore >= 70 || highCount >= 2) {
+    triggers.push("Attorney review recommended before signing or relying on this draft.");
+  }
+
+  if (reliability.level === "limited") {
+    triggers.push("Re-upload a cleaner or fuller document before treating the score as reliable.");
+  }
+
+  if (completeness.missing.length >= 3) {
+    triggers.push("Core guardrails are missing; confirm whether they appear in another exhibit or SOW.");
+  }
+
+  if (ambiguity.score >= 55) {
+    triggers.push("Several vague standards appear; convert them into objective triggers or deadlines.");
+  }
+
+  if (triggers.length === 0) {
+    triggers.push("Use this as triage, then verify business-critical clauses against the source document.");
+  }
+
+  return triggers;
 }
 
 function extractDates(text) {
@@ -941,13 +1012,14 @@ function countRiskWords(text) {
   return countMatches(text, /\b(?:all|any|sole|uncapped|indemnify|exclusive|perpetuity|immediate|waive|penalty|breach|competitor|withhold)\b/gi);
 }
 
-function estimateConfidence({ wordCount, signalCount, sectionCount, completenessScore }) {
+function estimateConfidence({ wordCount, signalCount, sectionCount, completenessScore, reliabilityScore }) {
   const lengthScore = wordCount < 150 ? 0.38 : wordCount < 450 ? 0.58 : wordCount < 1600 ? 0.76 : 0.84;
   const signalScore = Math.min(0.12, signalCount * 0.012);
   const structureScore = Math.min(0.08, sectionCount * 0.015);
   const completenessDrag = completenessScore > 70 ? -0.08 : completenessScore > 45 ? -0.04 : 0;
+  const reliabilityDrag = reliabilityScore < 55 ? -0.14 : reliabilityScore < 75 ? -0.06 : 0;
 
-  return clamp(round(lengthScore + signalScore + structureScore + completenessDrag, 2), 0.35, 0.92);
+  return clamp(round(lengthScore + signalScore + structureScore + completenessDrag + reliabilityDrag, 2), 0.28, 0.9);
 }
 
 function categoryScore(categories, id) {

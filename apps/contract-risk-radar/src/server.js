@@ -166,6 +166,8 @@ Return only valid JSON with this shape:
   "missing": [string],
   "questions": [string],
   "mitigators": [string],
+  "reliability": {"score": number, "level": string, "warnings": [string]},
+  "reviewTriggers": [string],
   "factors": {"exposure": number, "completeness": number, "ambiguity": number, "obligations": number, "timeTraps": number, "concentration": number, "control": number},
   "metrics": {"wordCount": number, "riskyClauses": number, "extractedDates": number, "paymentMentions": number, "ambiguityScore": number, "completenessScore": number, "weightedSignalLoad": number}
 }
@@ -253,6 +255,8 @@ function normalizeAnalysis(analysis) {
     missing: Array.isArray(analysis.missing) ? analysis.missing.slice(0, 10) : [],
     questions: Array.isArray(analysis.questions) ? analysis.questions.slice(0, 8) : [],
     mitigators: Array.isArray(analysis.mitigators) ? analysis.mitigators.slice(0, 10) : [],
+    reliability: analysis.reliability || { score: 60, level: "usable", warnings: [] },
+    reviewTriggers: Array.isArray(analysis.reviewTriggers) ? analysis.reviewTriggers.slice(0, 8) : [],
     factors: analysis.factors || {},
     metrics: analysis.metrics || {}
   };

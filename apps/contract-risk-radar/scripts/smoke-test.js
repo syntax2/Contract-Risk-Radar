@@ -44,6 +44,8 @@ async function main() {
     assert.ok(analysis.factors.exposure >= 50, "Expected exposure factor to be scored.");
     assert.ok(analysis.factors.completeness >= 1, "Expected completeness factor to be scored.");
     assert.ok(Array.isArray(analysis.mitigators), "Expected mitigators array.");
+    assert.ok(analysis.reliability.score >= 50, "Expected reliability scoring.");
+    assert.ok(Array.isArray(analysis.reviewTriggers), "Expected review triggers.");
     assert.ok(analysis.metrics.weightedSignalLoad > 0, "Expected weighted signal load metric.");
 
     process.stdout.write("Contract Risk Radar smoke test passed.\n");
