@@ -1,20 +1,31 @@
 const zlib = require("node:zlib");
+const { PDFParse } = require("pdf-parse");
 
-function extractTextFromUpload({ filename = "", mimeType = "", buffer }) {
+async function extractTextFromUpload({ filename = "", mimeType = "", buffer }) {
   const extension = filename.toLowerCase().split(".").pop() || "";
 
   if (extension === "docx" || mimeType.includes("wordprocessingml")) {
-    return extractDocxText(buffer);
+    return withExtractionMeta(extractDocxText(buffer), {
+      kind: "docx",
+      algorithm: "docx-xml-body-reader",
+      decodedStreams: 1,
+      totalStreams: 1
+    });
   }
 
   if (extension === "pdf" || mimeType === "application/pdf") {
     return extractPdfText(buffer);
   }
 
-  return {
+  return withExtractionMeta({
     text: buffer.toString("utf8"),
     warnings: []
-  };
+  }, {
+    kind: "plain-text",
+    algorithm: "utf8-buffer-reader",
+    decodedStreams: 1,
+    totalStreams: 1
+  });
 }
 
 function extractDocxText(buffer) {
@@ -44,42 +55,128 @@ function extractDocxText(buffer) {
   };
 }
 
-function extractPdfText(buffer) {
-  const latin = buffer.toString("latin1");
-  const texts = [];
-  const warnings = [
-    "PDF extraction is best-effort for text-based PDFs. Scanned image PDFs need OCR before analysis."
-  ];
-  const streamRegex = /<<(.*?)>>\s*stream\r?\n?([\s\S]*?)\r?\n?endstream/g;
-  let match;
+async function extractPdfText(buffer) {
+  const warnings = [];
+  const parser = new PDFParse({ data: buffer });
 
-  while ((match = streamRegex.exec(latin)) !== null) {
-    const dictionary = match[1];
-    const rawStream = Buffer.from(match[2], "latin1");
-    const decoded = decodePdfStream(rawStream, dictionary);
+  try {
+    const result = await parser.getText();
+    const text = normalizeExtractedText(result.text);
+
+    if (!text) {
+      throw new Error("No selectable text was found in this PDF.");
+    }
+
+    if (countWords(text) < 40) {
+      warnings.push("Very little selectable text was recovered; this may be a scanned or image-heavy PDF.");
+    }
+
+    warnings.push("PDF extraction uses a structured PDF text engine. Scanned PDFs still need OCR.");
+
+    return withExtractionMeta({
+      text,
+      warnings
+    }, {
+      kind: "pdf",
+      algorithm: "pdf-parse-text-engine-v1",
+      pageCount: result.total || result.pages || countPdfPages(buffer.toString("latin1")),
+      decodedStreams: null,
+      totalStreams: null,
+      textOperators: null,
+      filters: {},
+      unsupportedFilters: {},
+      coverage: estimateTextLayerCoverage(text, result.total || result.pages || 0)
+    });
+  } finally {
+    await parser.destroy();
+  }
+}
+
+function extractPdfTextLegacy(buffer) {
+  const latin = buffer.toString("latin1");
+  const streams = readPdfStreams(latin);
+  const textRuns = [];
+  const warnings = [];
+  const stats = {
+    totalStreams: streams.length,
+    decodedStreams: 0,
+    textOperators: 0,
+    pageCount: countPdfPages(latin),
+    filters: {},
+    unsupportedFilters: {}
+  };
+
+  for (const stream of streams) {
+    const decoded = decodePdfStream(stream.raw, stream.dictionary);
 
     if (!decoded) {
+      registerUnsupportedFilters(stats, stream.dictionary);
       continue;
     }
 
-    texts.push(extractPdfTextOperators(decoded.toString("latin1")));
+    stats.decodedStreams += 1;
+    registerFilters(stats, stream.dictionary);
+
+    const extracted = extractPdfTextLayer(decoded.toString("latin1"));
+    stats.textOperators += extracted.operatorCount;
+
+    if (extracted.text) {
+      textRuns.push(extracted.text);
+    }
   }
 
-  const fallback = extractPdfTextOperators(latin);
-  const text = [...texts, fallback]
-    .join("\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const fallback = textRuns.length ? { text: "", operatorCount: 0 } : extractPdfTextLayer(latin);
+  stats.textOperators += fallback.operatorCount;
+
+  const text = normalizeExtractedText([...textRuns, fallback.text].filter(Boolean).join("\n\n"));
 
   if (!text) {
     throw new Error("No selectable text was found in this PDF.");
   }
 
-  return {
+  if (stats.unsupportedFilters && Object.keys(stats.unsupportedFilters).length) {
+    warnings.push("Some PDF streams used unsupported compression filters, so extraction may be incomplete.");
+  }
+
+  if (stats.pageCount === 0) {
+    warnings.push("Could not confidently count PDF pages from the object tree.");
+  }
+
+  if (countWords(text) < 40) {
+    warnings.push("Very little selectable text was recovered; this may be a scanned or image-heavy PDF.");
+  }
+
+  warnings.push("PDF extraction reads selectable text layers and decoded content streams. Scanned PDFs still need OCR.");
+
+  return withExtractionMeta({
     text,
     warnings
-  };
+  }, {
+    kind: "pdf",
+    algorithm: "pdf-text-layer-v3-stream-decoder",
+    pageCount: stats.pageCount,
+    decodedStreams: stats.decodedStreams,
+    totalStreams: stats.totalStreams,
+    textOperators: stats.textOperators,
+    filters: stats.filters,
+    unsupportedFilters: stats.unsupportedFilters,
+    coverage: estimateExtractionCoverage(text, stats)
+  });
+}
+
+function readPdfStreams(latin) {
+  const streams = [];
+  const streamRegex = /<<(.*?)>>\s*stream\r?\n?([\s\S]*?)\r?\n?endstream/g;
+  let match;
+
+  while ((match = streamRegex.exec(latin)) !== null) {
+    streams.push({
+      dictionary: match[1],
+      raw: Buffer.from(match[2], "latin1")
+    });
+  }
+
+  return streams;
 }
 
 function decodePdfStream(rawStream, dictionary) {
@@ -101,6 +198,10 @@ function decodePdfStream(rawStream, dictionary) {
     return Buffer.from(trimmed.toString("latin1").replace(/[^a-fA-F0-9]/g, ""), "hex");
   }
 
+  if (/ASCII85Decode/i.test(dictionary)) {
+    return decodeAscii85(trimmed.toString("latin1"));
+  }
+
   return trimmed;
 }
 
@@ -119,30 +220,62 @@ function trimStreamBoundaries(buffer) {
   return buffer.subarray(start, end);
 }
 
-function extractPdfTextOperators(content) {
+function extractPdfTextLayer(content) {
   const chunks = [];
-  const literalRegex = /\((?:\\.|[^\\)])*\)\s*Tj/g;
-  const arrayRegex = /\[(.*?)\]\s*TJ/gs;
-  const quoteRegex = /\((?:\\.|[^\\)])*\)\s*['"]/g;
+  const tokenRegex = /\[(?:\\.|[^\]])*?\]\s*TJ|(?:\((?:\\.|[^\\)])*\)|<[\da-fA-F\s]+>)\s*(?:Tj|'|")|(?:T\*|Td|TD|Tm)\b/g;
+  let operatorCount = 0;
   let match;
 
-  while ((match = literalRegex.exec(content)) !== null) {
-    chunks.push(decodePdfLiteral(match[0].replace(/\s*Tj$/, "")));
+  while ((match = tokenRegex.exec(content)) !== null) {
+    const token = match[0];
+
+    if (/^(?:T\*|Td|TD|Tm)\b/.test(token)) {
+      chunks.push("\n");
+      continue;
+    }
+
+    operatorCount += 1;
+
+    if (/\]\s*TJ$/.test(token)) {
+      chunks.push(decodePdfArray(token));
+    } else {
+      chunks.push(decodePdfString(token.replace(/\s*(?:Tj|'|")$/, "")));
+    }
   }
 
-  while ((match = arrayRegex.exec(content)) !== null) {
-    const literals = match[1].match(/\((?:\\.|[^\\)])*\)/g) || [];
-    chunks.push(literals.map(decodePdfLiteral).join(""));
+  return {
+    text: normalizeExtractedText(chunks.join(" ")),
+    operatorCount
+  };
+}
+
+function decodePdfArray(value) {
+  const body = value.replace(/^\[/, "").replace(/\]\s*TJ$/, "");
+  const parts = body.match(/\((?:\\.|[^\\)])*\)|<[\da-fA-F\s]+>|-?\d+(?:\.\d+)?/g) || [];
+  const output = [];
+
+  for (const part of parts) {
+    if (/^-?\d/.test(part)) {
+      const spacing = Number(part);
+      if (Number.isFinite(spacing) && spacing > 120) {
+        output.push(" ");
+      }
+      continue;
+    }
+
+    output.push(decodePdfString(part));
   }
 
-  while ((match = quoteRegex.exec(content)) !== null) {
-    chunks.push(decodePdfLiteral(match[0].replace(/\s*['"]$/, "")));
+  return output.join("");
+}
+
+function decodePdfString(value) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("<")) {
+    return decodePdfHex(trimmed);
   }
 
-  return chunks
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return decodePdfLiteral(trimmed);
 }
 
 function decodePdfLiteral(value) {
@@ -156,6 +289,138 @@ function decodePdfLiteral(value) {
     .replace(/\\f/g, "\f")
     .replace(/\\([()\\])/g, "$1")
     .replace(/\\([0-7]{1,3})/g, (_match, octal) => String.fromCharCode(parseInt(octal, 8)));
+}
+
+function decodePdfHex(value) {
+  const hex = value.replace(/[<>\s]/g, "");
+  if (!hex) {
+    return "";
+  }
+
+  const evenHex = hex.length % 2 === 0 ? hex : `${hex}0`;
+  const buffer = Buffer.from(evenHex, "hex");
+
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    let text = "";
+    for (let index = 2; index + 1 < buffer.length; index += 2) {
+      text += String.fromCharCode(buffer.readUInt16BE(index));
+    }
+    return text;
+  }
+
+  return buffer.toString("latin1");
+}
+
+function decodeAscii85(value) {
+  const input = value.replace(/<~|~>/g, "").replace(/\s+/g, "");
+  const bytes = [];
+  let group = [];
+
+  for (const char of input) {
+    if (char === "z" && group.length === 0) {
+      bytes.push(0, 0, 0, 0);
+      continue;
+    }
+
+    const code = char.charCodeAt(0);
+    if (code < 33 || code > 117) {
+      continue;
+    }
+
+    group.push(code - 33);
+
+    if (group.length === 5) {
+      writeAscii85Group(bytes, group, 4);
+      group = [];
+    }
+  }
+
+  if (group.length) {
+    const length = group.length - 1;
+    while (group.length < 5) {
+      group.push(84);
+    }
+    writeAscii85Group(bytes, group, length);
+  }
+
+  return Buffer.from(bytes);
+}
+
+function writeAscii85Group(bytes, group, length) {
+  let value = 0;
+  for (const digit of group) {
+    value = value * 85 + digit;
+  }
+
+  const groupBytes = [
+    (value >>> 24) & 255,
+    (value >>> 16) & 255,
+    (value >>> 8) & 255,
+    value & 255
+  ];
+  bytes.push(...groupBytes.slice(0, length));
+}
+
+function normalizeExtractedText(text) {
+  return String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+\./g, ".")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function countPdfPages(latin) {
+  const matches = latin.match(/\/Type\s*\/Page\b/g);
+  return matches ? matches.length : 0;
+}
+
+function registerFilters(stats, dictionary) {
+  const filters = dictionary.match(/\/[A-Za-z0-9]+Decode\b/g) || [];
+  for (const filter of filters) {
+    stats.filters[filter.slice(1)] = (stats.filters[filter.slice(1)] || 0) + 1;
+  }
+}
+
+function registerUnsupportedFilters(stats, dictionary) {
+  const supported = new Set(["FlateDecode", "ASCIIHexDecode", "ASCII85Decode"]);
+  const filters = dictionary.match(/\/[A-Za-z0-9]+Decode\b/g) || [];
+
+  for (const filter of filters) {
+    const name = filter.slice(1);
+    if (!supported.has(name)) {
+      stats.unsupportedFilters[name] = (stats.unsupportedFilters[name] || 0) + 1;
+    }
+  }
+}
+
+function estimateExtractionCoverage(text, stats) {
+  const words = countWords(text);
+  const streamCoverage = stats.totalStreams ? stats.decodedStreams / stats.totalStreams : 0;
+  const pageDensity = stats.pageCount ? words / stats.pageCount : words;
+  const densityScore = Math.min(1, pageDensity / 220);
+  const operatorScore = Math.min(1, stats.textOperators / Math.max(1, stats.pageCount * 12));
+  return Math.round((streamCoverage * 0.35 + densityScore * 0.45 + operatorScore * 0.2) * 100);
+}
+
+function estimateTextLayerCoverage(text, pageCount) {
+  const words = countWords(text);
+  const density = pageCount ? words / pageCount : words;
+  return Math.round(Math.min(100, Math.max(35, (density / 180) * 100)));
+}
+
+function withExtractionMeta(result, extraction) {
+  const text = result.text || "";
+  return {
+    ...result,
+    extraction: {
+      ...extraction,
+      characters: text.length,
+      words: countWords(text)
+    }
+  };
 }
 
 function readZipEntries(buffer) {
@@ -238,6 +503,11 @@ function findEndOfCentralDirectory(buffer) {
   return -1;
 }
 
+function countWords(text) {
+  return (String(text || "").match(/\b[\w'-]+\b/g) || []).length;
+}
+
 module.exports = {
-  extractTextFromUpload
+  extractTextFromUpload,
+  extractPdfTextLegacy
 };
