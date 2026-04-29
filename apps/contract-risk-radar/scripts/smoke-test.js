@@ -28,7 +28,8 @@ async function main() {
         title: "Smoke Test Agreement",
         text: SAMPLE,
         role: "provider",
-        posture: "balanced"
+        posture: "balanced",
+        useAi: false
       })
     });
     const analysis = await response.json();
@@ -47,6 +48,7 @@ async function main() {
     assert.ok(analysis.reliability.score >= 50, "Expected reliability scoring.");
     assert.ok(Array.isArray(analysis.reviewTriggers), "Expected review triggers.");
     assert.ok(analysis.metrics.weightedSignalLoad > 0, "Expected weighted signal load metric.");
+    assert.ok(analysis.trust.evidenceLedger.length >= 1, "Expected trust evidence ledger.");
 
     process.stdout.write("Contract Risk Radar smoke test passed.\n");
   } finally {
