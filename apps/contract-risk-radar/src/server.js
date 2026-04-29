@@ -2,8 +2,10 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
-const { analyzeContract } = require("./analyzer");
+const { analyzeDocumentRisk } = require("./documentAnalyzer");
 const { extractTextFromUpload } = require("./extractors");
+const { buildLlmInputPacket } = require("./llmInput");
+const { analyzeWithOllama, getOllamaStatus } = require("./ollama");
 
 const DEFAULT_PORT = 48910;
 const MAX_JSON_BYTES = 30 * 1024 * 1024;
@@ -55,10 +57,12 @@ function createServer() {
       const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
       if (request.method === "GET" && url.pathname === "/health") {
+        const ollama = await getOllamaStatus();
         sendJson(response, 200, {
           ok: true,
-          aiEnabled: isOpenAIEnabled(),
-          engine: isOpenAIEnabled() ? "openai" : "local-risk-engine-v2"
+          aiEnabled: ollama.available || isOpenAIEnabled(),
+          engine: ollama.available ? "ollama-local-ai+rulebook-v3" : isOpenAIEnabled() ? "openai" : "local-risk-engine-v2",
+          ollama
         });
         return;
       }
@@ -72,7 +76,7 @@ function createServer() {
           return;
         }
 
-        const extracted = extractTextFromUpload({
+        const extracted = await extractTextFromUpload({
           filename: payload.filename,
           mimeType: payload.mimeType,
           buffer
@@ -81,6 +85,10 @@ function createServer() {
         sendJson(response, 200, {
           text: extracted.text,
           warnings: extracted.warnings || [],
+          extraction: extracted.extraction ? {
+            ...extracted.extraction,
+            warnings: extracted.warnings || []
+          } : null,
           stats: {
             characters: extracted.text.length,
             words: countWords(extracted.text)
@@ -101,7 +109,9 @@ function createServer() {
         const options = {
           title: payload.title || payload.filename || "Untitled agreement",
           role: payload.role || "neutral",
-          posture: payload.posture || "balanced"
+          posture: payload.posture || "balanced",
+          useAi: payload.useAi !== false,
+          extraction: payload.extraction || null
         };
 
         const analysis = await analyzeWithBestEngine(text, options);
@@ -128,21 +138,66 @@ function createServer() {
 }
 
 async function analyzeWithBestEngine(text, options) {
+  const baseline = enhanceTrustFallback(analyzeDocumentRisk(text, options));
+  const packet = buildLlmInputPacket({
+    text,
+    options,
+    baseline,
+    extraction: options.extraction
+  });
+
+  if (options.useAi !== false) {
+    try {
+      return normalizeAnalysis(attachPipeline(await analyzeWithOllama(packet, baseline), packet));
+    } catch (error) {
+      return normalizeAnalysis(attachPipeline({
+        ...baseline,
+        aiFallback: {
+          engine: "ollama",
+          reason: error.message || "Ollama analysis failed.",
+          status: error.ollamaStatus
+        }
+      }, packet));
+    }
+  }
+
   if (!isOpenAIEnabled()) {
-    return analyzeContract(text, options);
+    return attachPipeline(baseline, packet);
   }
 
   try {
     return await analyzeWithOpenAI(text, options);
   } catch (error) {
     return {
-      ...analyzeContract(text, options),
+      ...baseline,
       engine: "local-risk-engine",
       aiFallback: {
         reason: error.message || "OpenAI analysis failed."
       }
     };
   }
+}
+
+function attachPipeline(analysis, packet) {
+  return {
+    ...analysis,
+    pipeline: {
+      extraction: packet.sourceQuality,
+      llmInput: {
+        version: packet.version,
+        sectionCount: packet.sections.length,
+        evidenceItems: packet.evidence.length,
+        questionCount: packet.questionsForModel.length,
+        compactSourceCharacters: packet.compactSource.length,
+        instructions: packet.instructions
+      },
+      report: {
+        engine: analysis.engine,
+        model: analysis.model && analysis.model.llm ? analysis.model.llm.name : analysis.engine,
+        generatedAt: analysis.generatedAt || new Date().toISOString()
+      }
+    }
+  };
 }
 
 async function analyzeWithOpenAI(text, options) {
@@ -240,6 +295,7 @@ function getOpenAIOutputText(result) {
 function normalizeAnalysis(analysis) {
   return {
     engine: analysis.engine || "openai",
+    model: analysis.model || null,
     title: analysis.title || "Untitled agreement",
     generatedAt: analysis.generatedAt || new Date().toISOString(),
     summary: analysis.summary || "",
@@ -257,8 +313,76 @@ function normalizeAnalysis(analysis) {
     mitigators: Array.isArray(analysis.mitigators) ? analysis.mitigators.slice(0, 10) : [],
     reliability: analysis.reliability || { score: 60, level: "usable", warnings: [] },
     reviewTriggers: Array.isArray(analysis.reviewTriggers) ? analysis.reviewTriggers.slice(0, 8) : [],
+    trust: normalizeTrust(analysis.trust, analysis),
     factors: analysis.factors || {},
-    metrics: analysis.metrics || {}
+    metrics: analysis.metrics || {},
+    pipeline: analysis.pipeline || null,
+    aiFallback: analysis.aiFallback || null
+  };
+}
+
+function enhanceTrustFallback(analysis) {
+  const existingTrust = analysis.trust && typeof analysis.trust === "object" ? analysis.trust : {};
+  const documentProfile = analysis.documentProfile || {};
+  const isContract = !documentProfile.kind || documentProfile.kind === "contract";
+  const evidenceLedger = (analysis.clauses || []).slice(0, 6).map((clause) => ({
+    claim: clause.title,
+    evidence: clause.evidence,
+    interpretation: clause.impact,
+    strength: clause.confidence >= 0.82 ? "strong" : clause.confidence >= 0.68 ? "moderate" : "weak"
+  }));
+  const uncertainties = (analysis.missing || []).slice(0, 6).map((term) => ({
+    gap: `${term} was not found in the extracted text.`,
+    whyItMatters: "A missing guardrail can materially change the real risk profile.",
+    nextStep: "Check whether it appears in an exhibit, order form, or incorporated policy."
+  }));
+
+  return {
+    ...analysis,
+    trust: {
+      confidenceReason: existingTrust.confidenceReason || (isContract
+        ? "This report is grounded in deterministic clause signals, completeness checks, mitigators, and source-quality scoring. Enable Ollama for a deeper local reasoning overlay."
+        : "This report is grounded in document classification, sensitive-action signals, source-quality checks, and missing-context review. Enable Ollama for a deeper local reasoning overlay."),
+      narrative: existingTrust.narrative || "",
+      recommendedAction: existingTrust.recommendedAction || "",
+      evidenceLedger: Array.isArray(existingTrust.evidenceLedger) && existingTrust.evidenceLedger.length ? existingTrust.evidenceLedger : evidenceLedger,
+      uncertainties: Array.isArray(existingTrust.uncertainties) && existingTrust.uncertainties.length ? existingTrust.uncertainties : uncertainties,
+      sourceQuality: {
+        score: analysis.reliability ? analysis.reliability.score : 60,
+        level: analysis.reliability ? analysis.reliability.level : "usable",
+        notes: analysis.reliability ? analysis.reliability.warnings : []
+      },
+      method: Array.isArray(existingTrust.method) && existingTrust.method.length ? existingTrust.method : [
+        "Extracted text from the uploaded file.",
+        isContract ? "Split the document into sections and clause-sized units." : "Classified the document before choosing the scoring model.",
+        isContract ? "Scored risks against mitigators, missing guardrails, ambiguity, obligations, and deadline pressure." : "Scored sensitive actions, source-trust cues, process completeness, and missing verification context.",
+        "Prepared an evidence ledger so each finding can be checked against source text."
+      ],
+      attorneyReviewReason: existingTrust.attorneyReviewReason || "",
+      localOnly: true
+    }
+  };
+}
+
+function normalizeTrust(trust, analysis) {
+  const fallback = enhanceTrustFallback(analysis).trust;
+  const safeTrust = trust && typeof trust === "object" ? trust : {};
+  const sourceQuality = safeTrust.sourceQuality && typeof safeTrust.sourceQuality === "object" ? safeTrust.sourceQuality : fallback.sourceQuality;
+
+  return {
+    confidenceReason: safeTrust.confidenceReason || fallback.confidenceReason,
+    narrative: safeTrust.narrative || "",
+    recommendedAction: safeTrust.recommendedAction || "",
+    evidenceLedger: Array.isArray(safeTrust.evidenceLedger) ? safeTrust.evidenceLedger.slice(0, 8) : fallback.evidenceLedger,
+    uncertainties: Array.isArray(safeTrust.uncertainties) ? safeTrust.uncertainties.slice(0, 8) : fallback.uncertainties,
+    sourceQuality: {
+      score: clamp(Number(sourceQuality.score) || fallback.sourceQuality.score, 0, 100),
+      level: sourceQuality.level || fallback.sourceQuality.level,
+      notes: Array.isArray(sourceQuality.notes) ? sourceQuality.notes.slice(0, 8) : fallback.sourceQuality.notes
+    },
+    method: Array.isArray(safeTrust.method) ? safeTrust.method.slice(0, 6) : fallback.method,
+    attorneyReviewReason: safeTrust.attorneyReviewReason || "",
+    localOnly: safeTrust.localOnly !== false
   };
 }
 
@@ -373,7 +497,7 @@ if (require.main === module) {
 
     server.listen(options.port, () => {
       process.stdout.write(`Contract Risk Radar running at http://localhost:${options.port}\n`);
-      process.stdout.write(`Analysis engine: ${isOpenAIEnabled() ? "OpenAI Responses API" : "local risk engine"}\n`);
+      process.stdout.write(`Analysis engine: Ollama local AI when available, then local risk engine\n`);
     });
   } catch (error) {
     process.stderr.write(`${error.message}\n\n${usage()}`);
