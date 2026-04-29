@@ -27,11 +27,13 @@ const elements = {
   clauseList: document.getElementById("clauseList"),
   factorRibbon: document.getElementById("factorRibbon"),
   confidenceMetric: document.getElementById("confidenceMetric"),
-  wordMetric: document.getElementById("wordMetric"),
+  reliabilityMetric: document.getElementById("reliabilityMetric"),
   issueMetric: document.getElementById("issueMetric"),
   negotiationList: document.getElementById("negotiationList"),
   factorList: document.getElementById("factorList"),
   mitigatorList: document.getElementById("mitigatorList"),
+  reliabilityList: document.getElementById("reliabilityList"),
+  reviewTriggerList: document.getElementById("reviewTriggerList"),
   obligationList: document.getElementById("obligationList"),
   dateList: document.getElementById("dateList"),
   missingList: document.getElementById("missingList"),
@@ -62,6 +64,8 @@ async function initialize() {
   renderList(elements.negotiationList, [], (item) => item);
   renderList(elements.factorList, [], (item) => item);
   renderList(elements.mitigatorList, [], (item) => item);
+  renderList(elements.reliabilityList, [], (item) => item);
+  renderList(elements.reviewTriggerList, [], (item) => item);
   renderList(elements.obligationList, [], (item) => item);
   renderList(elements.dateList, [], (item) => item);
   renderList(elements.missingList, [], (item) => item);
@@ -215,7 +219,7 @@ function renderAnalysis(analysis) {
   radar.update(analysis);
 
   elements.confidenceMetric.textContent = `${Math.round((analysis.confidence || 0) * 100)}%`;
-  elements.wordMetric.textContent = formatNumber(analysis.metrics && analysis.metrics.wordCount);
+  elements.reliabilityMetric.textContent = analysis.reliability ? `${Math.round(analysis.reliability.score)}%` : "--";
   elements.issueMetric.textContent = formatNumber(analysis.metrics && analysis.metrics.riskyClauses);
 
   renderCategories(analysis.categories || []);
@@ -223,6 +227,8 @@ function renderAnalysis(analysis) {
   renderList(elements.negotiationList, analysis.negotiation, (item) => item);
   renderList(elements.factorList, factorItems(analysis.factors), (item) => item);
   renderList(elements.mitigatorList, analysis.mitigators, (item) => item);
+  renderList(elements.reliabilityList, analysis.reliability && analysis.reliability.warnings, (item) => item);
+  renderList(elements.reviewTriggerList, analysis.reviewTriggers, (item) => item);
   renderList(elements.obligationList, analysis.obligations, (item) => `${item.owner}: ${item.action}`);
   renderList(elements.dateList, analysis.dates, (item) => `${item.dateText}: ${item.action}`);
   renderList(elements.missingList, analysis.missing, (item) => item);
@@ -318,7 +324,7 @@ function updateFactorRibbon(factors) {
   const safeFactors = factors || {};
   const entries = [
     ["Exposure", safeFactors.exposure],
-    ["Completeness", safeFactors.completeness],
+    ["Reliability", state.analysis && state.analysis.reliability ? state.analysis.reliability.score : undefined],
     ["Ambiguity", safeFactors.ambiguity],
     ["Time traps", safeFactors.timeTraps],
     ["Control", safeFactors.control]
@@ -402,7 +408,10 @@ function createEmptyAnalysis() {
       { id: "restrictions", score: 7 },
       { id: "disputes", score: 8 },
       { id: "data", score: 6 }
-    ]
+    ],
+    reliability: {
+      score: 82
+    }
   };
 }
 
@@ -462,8 +471,8 @@ function RiskRadar(canvas) {
   renderer.setClearColor(0x071115, 0);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-  camera.position.set(0, 6.2, 10.8);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.position.set(0, 7.2, 13.2);
   camera.lookAt(0, 0, 0);
 
   const root = new THREE.Group();
@@ -483,8 +492,8 @@ function RiskRadar(canvas) {
 
   const ringGroup = new THREE.Group();
   root.add(ringGroup);
-  for (let index = 0; index < 4; index += 1) {
-    const radius = 1.4 + index * 1.15;
+  for (let index = 0; index < 6; index += 1) {
+    const radius = 1.5 + index * 1.3;
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(radius, 0.012, 8, 144),
       new THREE.MeshBasicMaterial({ color: 0x78fff1, transparent: true, opacity: 0.18 - index * 0.018 })
@@ -498,7 +507,7 @@ function RiskRadar(canvas) {
   const axisPoints = [];
   for (let index = 0; index < 7; index += 1) {
     const angle = (index / 7) * Math.PI * 2;
-    axisPoints.push(0, 0, 0, Math.cos(angle) * 5.3, 0, Math.sin(angle) * 5.3);
+    axisPoints.push(0, 0, 0, Math.cos(angle) * 7.2, 0, Math.sin(angle) * 7.2);
   }
   axisGeometry.setAttribute("position", new THREE.Float32BufferAttribute(axisPoints, 3));
   root.add(new THREE.LineSegments(axisGeometry, axisMaterial));
@@ -521,7 +530,7 @@ function RiskRadar(canvas) {
   halo.position.y = 0.06;
   root.add(halo);
 
-  const pylonGeometry = new THREE.CylinderGeometry(0.11, 0.18, 1, 16);
+  const pylonGeometry = new THREE.CylinderGeometry(0.08, 0.18, 1, 18);
   const categoryIds = ["payment", "liability", "ip", "termination", "restrictions", "disputes", "data"];
   const pylons = categoryIds.map((id, index) => {
     const angle = (index / categoryIds.length) * Math.PI * 2 - Math.PI / 2;
@@ -532,7 +541,7 @@ function RiskRadar(canvas) {
       roughness: 0.34
     });
     const mesh = new THREE.Mesh(pylonGeometry, material);
-    mesh.position.set(Math.cos(angle) * 3.8, 0.08, Math.sin(angle) * 3.8);
+    mesh.position.set(Math.cos(angle) * 5.1, 0.08, Math.sin(angle) * 5.1);
     mesh.scale.y = 0.16;
     mesh.userData = { id, target: 0.16, baseX: mesh.position.x, baseZ: mesh.position.z };
     root.add(mesh);
@@ -540,13 +549,13 @@ function RiskRadar(canvas) {
   });
 
   const particleGeometry = new THREE.BufferGeometry();
-  const particleCount = 420;
+  const particleCount = 820;
   const particlePositions = new Float32Array(particleCount * 3);
   for (let index = 0; index < particleCount; index += 1) {
-    const radius = 1.4 + Math.random() * 4.4;
+    const radius = 1.4 + Math.random() * 7.6;
     const angle = Math.random() * Math.PI * 2;
     particlePositions[index * 3] = Math.cos(angle) * radius;
-    particlePositions[index * 3 + 1] = Math.random() * 2.8 - 0.35;
+    particlePositions[index * 3 + 1] = Math.random() * 3.4 - 0.45;
     particlePositions[index * 3 + 2] = Math.sin(angle) * radius;
   }
   particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
@@ -597,9 +606,9 @@ function RiskRadar(canvas) {
     const elapsed = clock.getElapsedTime();
     const riskIntensity = target.risk / 100;
 
-    root.rotation.y = elapsed * (0.11 + riskIntensity * 0.08);
+    root.rotation.y = elapsed * (0.055 + riskIntensity * 0.045);
     ringGroup.rotation.z = -elapsed * 0.18;
-    particles.rotation.y = elapsed * 0.035;
+    particles.rotation.y = elapsed * 0.022;
     halo.rotation.z = elapsed * 1.2;
     halo.scale.setScalar(1 + Math.sin(elapsed * 2.2) * 0.04 + riskIntensity * 0.12);
 
@@ -619,8 +628,8 @@ function RiskRadar(canvas) {
 
   function resize() {
     const bounds = canvas.parentElement.getBoundingClientRect();
-    const width = Math.max(320, Math.floor(bounds.width));
-    const height = Math.max(320, Math.floor(bounds.height));
+    const width = Math.max(320, Math.floor(bounds.width || window.innerWidth));
+    const height = Math.max(420, Math.floor(bounds.height || window.innerHeight));
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
