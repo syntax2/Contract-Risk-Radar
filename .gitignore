@@ -1,6 +1,7 @@
 .run/
 phone-transfer-backups/
 node_modules/
+output/
 
 # Android / Gradle
 .gradle/
