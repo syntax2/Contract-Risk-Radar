@@ -8,6 +8,7 @@ const { buildLlmInputPacket } = require("./llmInput");
 const { analyzeWithOllama, getOllamaStatus } = require("./ollama");
 
 const DEFAULT_PORT = 48910;
+const DEFAULT_HOST = "127.0.0.1";
 const MAX_JSON_BYTES = 30 * 1024 * 1024;
 const STATIC_DIR = path.join(__dirname, "static");
 const VENDOR_FILES = new Map([
@@ -23,13 +24,15 @@ Usage:
 
 Options:
   --port <number>      Port to listen on. Default: ${DEFAULT_PORT}
+  --host <address>     Host to bind. Default: ${DEFAULT_HOST}
   --help               Show this help.
 `;
 }
 
 function parseArgs(argv) {
   const options = {
-    port: DEFAULT_PORT
+    port: DEFAULT_PORT,
+    host: DEFAULT_HOST
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -37,6 +40,8 @@ function parseArgs(argv) {
 
     if (arg === "--port") {
       options.port = Number(argv[++index]);
+    } else if (arg === "--host") {
+      options.host = String(argv[++index] || "").trim();
     } else if (arg === "--help") {
       options.help = true;
     } else {
@@ -46,6 +51,10 @@ function parseArgs(argv) {
 
   if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535) {
     throw new Error(`Invalid port: ${options.port}`);
+  }
+
+  if (!options.host) {
+    throw new Error("Host cannot be empty.");
   }
 
   return options;
@@ -495,8 +504,20 @@ if (require.main === module) {
 
     const server = createServer();
 
-    server.listen(options.port, () => {
-      process.stdout.write(`Contract Risk Radar running at http://localhost:${options.port}\n`);
+    const shutdown = (signal) => {
+      process.stdout.write(`\n${signal} received. Closing Contract Risk Radar...\n`);
+      server.close(() => {
+        process.stdout.write("Contract Risk Radar stopped.\n");
+        process.exit(0);
+      });
+    };
+
+    process.once("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
+
+    server.listen(options.port, options.host, () => {
+      const shownHost = options.host === "0.0.0.0" ? "localhost" : options.host;
+      process.stdout.write(`Contract Risk Radar running at http://${shownHost}:${options.port}\n`);
       process.stdout.write(`Analysis engine: Ollama local AI when available, then local risk engine\n`);
     });
   } catch (error) {
