@@ -6,8 +6,10 @@
   "license": "UNLICENSED",
   "type": "commonjs",
   "scripts": {
+    "dev": "node src/server.js --host 127.0.0.1 --port 48910",
     "start": "node src/server.js",
-    "smoke-test": "node scripts/smoke-test.js"
+    "smoke-test": "node scripts/smoke-test.js",
+    "test": "node scripts/smoke-test.js"
   },
   "dependencies": {
     "pdf-parse": "^2.4.5",
