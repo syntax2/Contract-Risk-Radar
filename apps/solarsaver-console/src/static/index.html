@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SolarSaver AI Console</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail" aria-label="Primary">
+        <div class="brand-mark" aria-hidden="true">SS</div>
+        <nav class="rail-nav">
+          <button class="icon-button active" data-view="overview" aria-label="Overview" title="Overview">
+            <span class="icon-sun" aria-hidden="true"></span>
+          </button>
+          <button class="icon-button" data-view="devices" aria-label="Devices" title="Devices">
+            <span class="icon-plug" aria-hidden="true"></span>
+          </button>
+          <button class="icon-button" data-view="policy" aria-label="Policy" title="Policy">
+            <span class="icon-policy" aria-hidden="true"></span>
+          </button>
+          <button class="icon-button" data-view="firmware" aria-label="Firmware" title="Firmware">
+            <span class="icon-chip" aria-hidden="true"></span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">SolarSaver AI</p>
+            <h1>Energy command</h1>
+          </div>
+          <div class="top-actions">
+            <button class="ghost-button" id="syncButton" type="button">
+              <span class="icon-sync" aria-hidden="true"></span>
+              Sync
+            </button>
+            <button class="primary-button" id="applyPolicyButton" type="button">
+              <span class="icon-bolt" aria-hidden="true"></span>
+              Apply
+            </button>
+          </div>
+        </header>
+
+        <section class="scene-band" aria-label="Live energy map">
+          <canvas id="energyScene"></canvas>
+          <div class="scene-overlay">
+            <div class="site-chip">
+              <span class="status-dot"></span>
+              <span id="siteName">Jaipur rooftop</span>
+            </div>
+            <div class="hero-metrics" aria-label="Live metrics">
+              <article>
+                <span>Solar</span>
+                <strong id="solarWatts">0 W</strong>
+              </article>
+              <article>
+                <span>Load</span>
+                <strong id="loadWatts">0 W</strong>
+              </article>
+              <article>
+                <span>Grid</span>
+                <strong id="gridVolts">0 V</strong>
+              </article>
+              <article>
+                <span>Mode</span>
+                <strong id="currentAction">Idle</strong>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="summary-grid" aria-label="System summary">
+          <article class="metric-card good">
+            <span>Savings today</span>
+            <strong id="savingsToday">INR 0</strong>
+            <small>Solar shifted loads</small>
+          </article>
+          <article class="metric-card">
+            <span>Solar probability</span>
+            <strong id="solarEstimate">0%</strong>
+            <small>One-hour moving average</small>
+          </article>
+          <article class="metric-card watch">
+            <span>Outage risk</span>
+            <strong id="outageRisk">0%</strong>
+            <small>Grid dip trend</small>
+          </article>
+          <article class="metric-card">
+            <span>Battery reserve</span>
+            <strong id="batteryPct">0%</strong>
+            <small>Protected floor</small>
+          </article>
+        </section>
+
+        <section class="control-grid">
+          <div class="panel live-panel" data-panel="overview">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Live frame</p>
+                <h2>Edge telemetry</h2>
+              </div>
+              <span class="pill" id="mqttState">MQTT online</span>
+            </div>
+            <pre id="telemetryJson" class="json-readout"></pre>
+          </div>
+
+          <div class="panel forecast-panel" data-panel="overview">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Forecast</p>
+                <h2>Next solar window</h2>
+              </div>
+              <span class="pill neutral" id="tariffLabel">ToU active</span>
+            </div>
+            <div class="forecast-bars" id="forecastBars"></div>
+          </div>
+
+          <div class="panel devices-panel" data-panel="devices">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Zigbee</p>
+                <h2>Load manager</h2>
+              </div>
+              <span class="pill" id="devicesOn">0 on</span>
+            </div>
+            <div class="device-list" id="deviceList"></div>
+          </div>
+
+          <div class="panel policy-panel" data-panel="policy">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Policy</p>
+                <h2>Optimizer rules</h2>
+              </div>
+              <div class="segmented" role="group" aria-label="Mode">
+                <button type="button" data-mode="optimizer" class="selected">Auto</button>
+                <button type="button" data-mode="reserve">Reserve</button>
+                <button type="button" data-mode="comfort">Comfort</button>
+              </div>
+            </div>
+            <div class="form-grid">
+              <label>
+                Cheap start
+                <input id="cheapStart" type="number" min="0" max="23" value="22">
+              </label>
+              <label>
+                Cheap end
+                <input id="cheapEnd" type="number" min="0" max="23" value="6">
+              </label>
+              <label>
+                Solar threshold
+                <input id="solarThreshold" type="range" min="100" max="2500" step="50" value="500">
+                <span id="solarThresholdLabel">500 W</span>
+              </label>
+              <label>
+                Reserve
+                <input id="reservePct" type="range" min="10" max="90" step="5" value="35">
+                <span id="reserveLabel">35%</span>
+              </label>
+            </div>
+            <label class="toggle-row">
+              <input id="outageGuard" type="checkbox" checked>
+              <span></span>
+              Outage guard
+            </label>
+          </div>
+
+          <div class="panel firmware-panel" data-panel="firmware">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Fleet</p>
+                <h2>Firmware and security</h2>
+              </div>
+              <button class="small-button" id="stageOtaButton" type="button">
+                <span class="icon-upload" aria-hidden="true"></span>
+                Stage
+              </button>
+            </div>
+            <div class="firmware-grid">
+              <div>
+                <span>Version</span>
+                <strong id="firmwareVersion">0.1.0-edge</strong>
+              </div>
+              <div>
+                <span>Transport</span>
+                <strong id="mqttAuth">HMAC MQTTS</strong>
+              </div>
+              <div>
+                <span>Matter</span>
+                <strong id="matterState">Ready</strong>
+              </div>
+              <div>
+                <span>OTA</span>
+                <strong id="otaState">Staged</strong>
+              </div>
+            </div>
+            <div class="progress-track" aria-label="OTA rollout">
+              <span id="otaProgress"></span>
+            </div>
+          </div>
+
+          <div class="panel event-panel" data-panel="overview">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Events</p>
+                <h2>Operations log</h2>
+              </div>
+            </div>
+            <ol class="event-list" id="eventList"></ol>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
