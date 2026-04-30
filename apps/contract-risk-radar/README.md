@@ -1,19 +1,19 @@
 # Contract Risk Radar
 
-Contract Risk Radar is a local-first contract analysis workspace for freelancers, consultants, agencies, and small teams. It turns pasted or uploaded agreement text into a trust brief with source-grounded evidence, uncertainty, negotiation asks, obligations, and renewal/date watchlist.
+Contract Risk Radar is a local-first document risk workspace for contracts, procedural PDFs, and sensitive workflow guides. It turns pasted or uploaded text into a trust brief with source-grounded evidence, uncertainty, recommended checks, obligations, and source-quality notes.
 
-The first slice is intentionally dependency-free:
+The current slice is intentionally local-first:
 
 - Paste contract text directly.
 - Upload `.txt`, `.md`, `.docx`, or text-based `.pdf` files.
-- Recover PDF text with a stream decoder that reads text operators, hex/literal strings, stream filters, page count, and extraction coverage.
+- Recover PDF text with a structured PDF text engine and source-quality metadata.
 - Analyze locally with Ollama when it is running.
 - Fall back to the built-in v2 risk engine when Ollama is unavailable.
-- Inspect the pipeline: extraction, LLM input packet, final report, evidence ledger, uncertainty list, category pressure rows, mitigators, obligations, and date watchlist.
+- Inspect the pipeline: extraction, LLM input packet, final report, evidence ledger, uncertainty list, category pressure rows, mitigators, obligations, and source-quality notes.
 
 ## Risk Engine
 
-The local analyzer uses a multi-factor scoring model instead of a flat keyword count:
+The local analyzer first classifies the document, then chooses the right scoring model. Contract-like documents use a multi-factor clause model instead of a flat keyword count:
 
 - Clause signals are detected by category, confidence, role sensitivity, and severity.
 - Mitigators such as liability caps, payment-gated IP transfer, cure periods, and confidentiality exclusions reduce category pressure.
@@ -23,13 +23,16 @@ The local analyzer uses a multi-factor scoring model instead of a flat keyword c
 
 The returned analysis includes `factors`, `mitigators`, category momentum, weighted signal load, clause confidence, negotiation asks, and a `trust` block with evidence, uncertainty, method, and source-quality notes.
 
+Procedural documents, such as financial workflow guides, are not forced into contract language. They are scored around sensitive actions, identity exposure, official-source cues, financial-data handling, compliance gaps, and follow-up uncertainty.
+
 ## Analysis Pipeline
 
 The app now separates the analysis into three explicit algorithms:
 
-1. `extractTextFromUpload` recovers document text. For PDFs it decodes content streams, reads `Tj`, `TJ`, quote, hex, and literal text operators, and reports page/coverage metadata.
-2. `buildLlmInputPacket` converts the extracted text into an LLM-ready packet with source quality, section excerpts, deterministic evidence, missing guardrails, and model questions.
-3. `analyzeWithOllama` asks the local model to create the final report judgment from that packet, while the deterministic evidence ledger remains available for auditability.
+1. `extractTextFromUpload` recovers document text. For PDFs it uses `pdf-parse`, reports page/text metadata, and keeps OCR limitations visible.
+2. `analyzeDocumentRisk` classifies the document and builds a deterministic source-grounded risk baseline.
+3. `buildLlmInputPacket` converts the extracted text into an LLM-ready packet with source quality, section excerpts, deterministic evidence, missing guardrails or verification gaps, and model questions.
+4. `analyzeWithOllama` asks the local model to create the final report judgment from that packet, while the deterministic evidence ledger remains available for auditability.
 
 ## Local AI With Ollama
 
@@ -59,6 +62,12 @@ Then open:
 
 ```text
 http://localhost:48910
+```
+
+The server binds to `127.0.0.1` by default so the app stays local to your machine. To expose it intentionally, pass an explicit host:
+
+```powershell
+node apps\contract-risk-radar\src\server.js --host 0.0.0.0 --port 48910
 ```
 
 ## Optional OpenAI Analysis
