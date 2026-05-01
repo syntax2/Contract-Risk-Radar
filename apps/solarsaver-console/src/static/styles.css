@@ -271,6 +271,14 @@ h2 {
   margin-top: 14px;
 }
 
+.insight-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr 0.9fr;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+
 .metric-card,
 .panel {
   border: 1px solid var(--line);
@@ -330,12 +338,137 @@ h2 {
   padding: 16px;
 }
 
+.decision-panel,
+.balance-panel,
+.action-panel {
+  min-height: 214px;
+}
+
 .panel-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 14px;
+}
+
+.decision-copy {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 800;
+}
+
+.decision-list,
+.impact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reason-row,
+.impact-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8faf6;
+  border: 1px solid #e8eee7;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reason-row strong,
+.impact-row strong {
+  color: var(--ink);
+}
+
+.reason-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 5px rgba(31, 157, 115, 0.12);
+}
+
+.reason-row.warn .reason-dot {
+  background: var(--coral);
+  box-shadow: 0 0 0 5px rgba(217, 109, 77, 0.12);
+}
+
+.balance-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.balance-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.balance-track {
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e8eee7;
+}
+
+.balance-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--teal);
+  transition: width 260ms ease;
+}
+
+.balance-fill.solar {
+  background: linear-gradient(90deg, var(--sun), var(--mint));
+}
+
+.balance-fill.load {
+  background: linear-gradient(90deg, #4d7ea8, var(--teal));
+}
+
+.balance-fill.battery {
+  background: linear-gradient(90deg, var(--violet), #3db79b);
+}
+
+.balance-fill.risk {
+  background: linear-gradient(90deg, var(--mint), var(--coral));
+}
+
+.balance-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.balance-legend span {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8faf6;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.recommendation {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 22px;
+  line-height: 1.15;
 }
 
 .json-readout {
@@ -356,12 +489,12 @@ h2 {
   grid-template-columns: repeat(8, minmax(30px, 1fr));
   gap: 10px;
   align-items: end;
-  min-height: 190px;
+  min-height: 226px;
 }
 
 .bar-cell {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr auto auto;
   gap: 8px;
   min-width: 0;
 }
@@ -399,6 +532,16 @@ h2 {
   font-weight: 800;
 }
 
+.bar-meta {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  font-weight: 800;
+}
+
 .device-list {
   display: grid;
   gap: 10px;
@@ -409,7 +552,7 @@ h2 {
   grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 72px;
+  min-height: 86px;
   border-radius: 8px;
   padding: 10px;
   background: #f8faf6;
@@ -421,8 +564,31 @@ h2 {
 }
 
 .device-card small {
+  display: block;
+  margin-top: 3px;
   color: var(--muted);
   font-weight: 700;
+}
+
+.device-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.device-tags span {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #e9f6ef;
+  color: #106b48;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.device-tags span.hold {
+  background: #f5f0e8;
+  color: #7a5d21;
 }
 
 .device-icon {
@@ -735,6 +901,7 @@ input[type="range"] {
 
 @media (max-width: 1120px) {
   .summary-grid,
+  .insight-grid,
   .control-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -789,6 +956,7 @@ input[type="range"] {
   }
 
   .summary-grid,
+  .insight-grid,
   .control-grid,
   .form-grid,
   .firmware-grid {
@@ -797,6 +965,10 @@ input[type="range"] {
 
   .forecast-bars {
     grid-template-columns: repeat(4, minmax(42px, 1fr));
+  }
+
+  .balance-row {
+    grid-template-columns: 76px minmax(0, 1fr) 64px;
   }
 }
 
