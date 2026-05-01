@@ -16,6 +16,15 @@ const els = {
   solarEstimate: document.querySelector("#solarEstimate"),
   outageRisk: document.querySelector("#outageRisk"),
   batteryPct: document.querySelector("#batteryPct"),
+  decisionTitle: document.querySelector("#decisionTitle"),
+  decisionConfidence: document.querySelector("#decisionConfidence"),
+  decisionCopy: document.querySelector("#decisionCopy"),
+  decisionList: document.querySelector("#decisionList"),
+  surplusLabel: document.querySelector("#surplusLabel"),
+  balanceStack: document.querySelector("#balanceStack"),
+  balanceLegend: document.querySelector("#balanceLegend"),
+  recommendedAction: document.querySelector("#recommendedAction"),
+  impactList: document.querySelector("#impactList"),
   telemetryJson: document.querySelector("#telemetryJson"),
   forecastBars: document.querySelector("#forecastBars"),
   deviceList: document.querySelector("#deviceList"),
@@ -139,6 +148,9 @@ function render(data) {
   }, null, 2);
 
   renderForecast(data.forecast);
+  renderDecision(data);
+  renderBalance(data);
+  renderRecommendation(data);
   renderDevices(data.devices);
   renderPolicy(data.policy);
   renderFirmware(data.firmware);
@@ -157,22 +169,121 @@ function renderForecast(forecast) {
           <div class="risk-line" style="bottom:${risk}%"></div>
         </div>
         <span>${slot.hour}</span>
+        <div class="bar-meta">
+          <b>${solar}% sun</b>
+          <b>INR ${slot.tariff.toFixed(1)}</b>
+        </div>
       </div>
     `;
   }).join("");
+}
+
+function renderDecision(data) {
+  const telemetry = data.telemetry;
+  const spare = telemetry.solarW - telemetry.loadW;
+  const cheapWindow = `${padHour(data.policy.cheapStart)}-${padHour(data.policy.cheapEnd)}`;
+  const isShifting = telemetry.action === "shift_load";
+  const reasons = [
+    {
+      label: "Solar margin",
+      value: spare >= 0 ? `${spare} W spare` : `${Math.abs(spare)} W short`,
+      ok: spare >= 0
+    },
+    {
+      label: "Solar confidence",
+      value: `${Math.round(telemetry.solar_est * 100)}%`,
+      ok: telemetry.solar_est >= 0.65
+    },
+    {
+      label: "Cheap window",
+      value: cheapWindow,
+      ok: true
+    },
+    {
+      label: "Outage guard",
+      value: data.policy.outageGuard ? `${Math.round(telemetry.outageRisk * 100)}% risk` : "disabled",
+      ok: data.policy.outageGuard ? telemetry.outageRisk < 0.55 : false
+    }
+  ];
+
+  els.decisionTitle.textContent = isShifting ? "Shift flexible loads now" : "Hold flexible loads";
+  els.decisionConfidence.textContent = `${Math.round(telemetry.solar_est * 100)}%`;
+  els.decisionCopy.textContent = isShifting
+    ? "Solar is covering the home with enough confidence to run priority devices."
+    : "The optimizer is protecting comfort and reserve until surplus solar improves.";
+  els.decisionList.innerHTML = reasons.map((reason) => `
+    <div class="reason-row ${reason.ok ? "" : "warn"}">
+      <span class="reason-dot"></span>
+      <strong>${escapeHtml(reason.label)}</strong>
+      <span>${escapeHtml(reason.value)}</span>
+    </div>
+  `).join("");
+}
+
+function renderBalance(data) {
+  const telemetry = data.telemetry;
+  const maxW = Math.max(telemetry.solarW, telemetry.loadW, data.policy.solarThreshold, 1);
+  const spare = telemetry.solarW - telemetry.loadW;
+  els.surplusLabel.textContent = spare >= 0 ? `${spare} W spare` : `${Math.abs(spare)} W grid`;
+  els.balanceStack.innerHTML = [
+    ["Solar", telemetry.solarW, maxW, "solar"],
+    ["Load", telemetry.loadW, maxW, "load"],
+    ["Battery", telemetry.batteryPct, 100, "battery"],
+    ["Outage", Math.round(telemetry.outageRisk * 100), 100, "risk"]
+  ].map(([label, value, max, type]) => `
+    <div class="balance-row">
+      <span>${label}</span>
+      <div class="balance-track"><span class="balance-fill ${type}" style="width:${clamp(value / max * 100, 4, 100)}%"></span></div>
+      <strong>${type === "solar" || type === "load" ? `${value} W` : `${value}%`}</strong>
+    </div>
+  `).join("");
+  els.balanceLegend.innerHTML = `
+    <span>Threshold ${data.policy.solarThreshold} W</span>
+    <span>Reserve ${data.policy.reservePct}%</span>
+    <span>${data.policy.mode} mode</span>
+    <span>${data.telemetry.devices_on}/${data.policy.maxDevices} devices</span>
+  `;
+}
+
+function renderRecommendation(data) {
+  const telemetry = data.telemetry;
+  const autoDevices = data.devices.filter((device) => device.mode === "auto");
+  const heldDevices = data.devices.filter((device) => device.mode === "hold");
+  const highestImpact = [...autoDevices, ...heldDevices].sort((a, b) => b.watts - a.watts)[0];
+  const spare = telemetry.solarW - telemetry.loadW;
+  els.recommendedAction.textContent = spare > 450
+    ? `Let ${highestImpact?.name || "priority loads"} run while solar is strong.`
+    : "Keep reserve protected and wait for the next solar lift.";
+  els.impactList.innerHTML = [
+    ["Avoided import", spare > 0 ? `${spare} W` : "0 W"],
+    ["Flexible load", `${autoDevices.length} auto`],
+    ["Held for safety", `${heldDevices.length} held`]
+  ].map(([label, value]) => `
+    <div class="impact-row">
+      <span class="reason-dot"></span>
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(value)}</span>
+    </div>
+  `).join("");
 }
 
 function renderDevices(devices) {
   els.deviceList.innerHTML = "";
 
   for (const device of devices) {
+    const rupees = Math.max(4, Math.round(device.watts * 0.012));
+    const readinessClass = device.mode === "auto" ? "" : "hold";
     const card = document.createElement("article");
     card.className = `device-card ${device.enabled ? "" : "is-off"}`;
     card.innerHTML = `
       <div class="device-icon"><span class="icon-plug" aria-hidden="true"></span></div>
       <div>
         <strong>${escapeHtml(device.name)}</strong>
-        <small>${escapeHtml(device.room)} · ${device.watts} W · P${device.priority}</small>
+        <small>${escapeHtml(device.room)} / ${device.watts} W / P${device.priority}</small>
+        <div class="device-tags">
+          <span class="${readinessClass}">${device.mode === "auto" ? "Solar ready" : titleCase(device.mode)}</span>
+          <span>INR ${rupees}/cycle</span>
+        </div>
       </div>
       <div class="device-actions" role="group" aria-label="${escapeHtml(device.name)} mode">
         <button class="mode-button ${device.mode === "auto" ? "active" : ""}" type="button" data-mode-value="auto" title="Auto">A</button>
@@ -403,6 +514,10 @@ function updateScene(data) {
 
 function titleCase(value) {
   return String(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function padHour(value) {
+  return `${String(value).padStart(2, "0")}:00`;
 }
 
 function relativeTime(ts) {
