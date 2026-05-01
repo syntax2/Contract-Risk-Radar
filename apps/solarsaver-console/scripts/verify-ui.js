@@ -87,7 +87,7 @@ async function main() {
 
     const layoutStats = await page.evaluate(() => {
       const overflow = [];
-      document.querySelectorAll("button, input, .hero-metrics strong, .metric-card strong, .panel-heading h2, .device-card strong, .device-card small, .firmware-grid strong").forEach((node) => {
+      document.querySelectorAll("button, input, .hero-metrics strong, .metric-card strong, .panel-heading h2, .device-card strong, .device-card small, .firmware-grid strong, .recommendation, .reason-row strong, .impact-row strong").forEach((node) => {
         const rect = node.getBoundingClientRect();
         if (rect.width < 0 || rect.height < 0) overflow.push(node.className || node.textContent.trim());
         if (node.scrollWidth - node.clientWidth > 2) overflow.push(node.textContent.trim().slice(0, 32));
