@@ -96,6 +96,43 @@
           </article>
         </section>
 
+        <section class="insight-grid" aria-label="Optimizer decision">
+          <article class="panel decision-panel" data-panel="overview">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Decision</p>
+                <h2 id="decisionTitle">Reading site state</h2>
+              </div>
+              <span class="pill" id="decisionConfidence">0%</span>
+            </div>
+            <p class="decision-copy" id="decisionCopy"></p>
+            <div class="decision-list" id="decisionList"></div>
+          </article>
+
+          <article class="panel balance-panel" data-panel="overview">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Balance</p>
+                <h2>Power flow</h2>
+              </div>
+              <span class="pill neutral" id="surplusLabel">0 W spare</span>
+            </div>
+            <div class="balance-stack" id="balanceStack"></div>
+            <div class="balance-legend" id="balanceLegend"></div>
+          </article>
+
+          <article class="panel action-panel" data-panel="overview">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Next</p>
+                <h2>Best action</h2>
+              </div>
+            </div>
+            <strong id="recommendedAction" class="recommendation">Wait for live data</strong>
+            <div class="impact-list" id="impactList"></div>
+          </article>
+        </section>
+
         <section class="control-grid">
           <div class="panel live-panel" data-panel="overview">
             <div class="panel-heading">
